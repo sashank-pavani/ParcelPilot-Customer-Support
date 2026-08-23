@@ -129,3 +129,9 @@ three concrete mechanisms rather than a generic policy statement:
 - **One chatbot, customer-facing.** The assessment allows building only one; an
   internal ops/investigation chatbot and a proactive issue-detection view were scoped
   out of this submission (see the Product Note for what that would look like).
+- **No standalone API layer.** `tools.py` already has the shape of one -- three
+  functions with explicit, typed inputs/outputs and access control enforced before
+  any data leaves the function -- but it's called in-process from Streamlit rather
+  than exposed over HTTP. Wrapping it in FastAPI would be a small, mechanical change
+  (each tool becomes one endpoint) and is the natural next step if this needed to
+  serve more than one UI.

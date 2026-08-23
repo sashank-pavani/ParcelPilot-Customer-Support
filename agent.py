@@ -6,14 +6,31 @@ reasons: (1) the interface needs to show which tool ran and with what arguments,
 itself the moment the model calls it.
 """
 import os
+import time
 
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 
 import documents
 import tools
 
-MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 MAX_TOOL_ROUNDS = 6
+MAX_RATE_LIMIT_RETRIES = 3
+
+
+def _send_with_retry(chat, message):
+    """The free tier can briefly rate-limit under bursts of tool round-trips. Retry a
+    couple of times with the delay the API itself suggests before giving up, so a
+    single 429 doesn't crash a conversation the user is actively having."""
+    for attempt in range(MAX_RATE_LIMIT_RETRIES):
+        try:
+            return chat.send_message(message)
+        except ResourceExhausted:
+            if attempt == MAX_RATE_LIMIT_RETRIES - 1:
+                raise
+            time.sleep(15 * (attempt + 1))
+
 
 TOOL_SCHEMA = [{
     "function_declarations": [
@@ -121,11 +138,15 @@ def build_document_index():
     return documents.build_index()
 
 
-def _function_call(response):
-    for part in response.candidates[0].content.parts:
-        if getattr(part, "function_call", None) and part.function_call.name:
-            return part.function_call
-    return None
+def _function_calls(response):
+    """Gemini may return several function calls in one turn (e.g. a data lookup and a
+    policy search together). All of them must be answered in the next message, or the
+    chat history is left with an unanswered call and the model stalls/loops."""
+    return [
+        part.function_call
+        for part in response.candidates[0].content.parts
+        if getattr(part, "function_call", None) and part.function_call.name
+    ]
 
 
 def _response_text(response):
@@ -141,30 +162,36 @@ def run_turn(chat, account_id: str, index, user_message: str):
     """
     tool_log = []
     pending_action = None
-    response = chat.send_message(user_message)
+    response = _send_with_retry(chat, user_message)
 
     for _ in range(MAX_TOOL_ROUNDS):
-        call = _function_call(response)
-        if call is None:
+        calls = _function_calls(response)
+        if not calls:
             break
 
-        name = call.name
-        args = dict(call.args)
-        tool_log.append({"name": name, "args": args})
+        response_parts = []
+        for call in calls:
+            name = call.name
+            args = dict(call.args)
+            tool_log.append({"name": name, "args": args})
 
-        if name == "search_policies":
-            result = tools.search_policies(account_id, index, **args)
-        elif name == "get_account_data":
-            result = tools.get_account_data(account_id, **args)
-        elif name == "create_escalation_draft":
-            result = tools.create_escalation_draft(account_id, **args)
-            if "error" not in result:
-                pending_action = {"account_id": account_id, **args}
-        else:
-            result = {"error": f"Unknown tool {name}"}
+            if name == "search_policies":
+                result = tools.search_policies(account_id, index, **args)
+            elif name == "get_account_data":
+                result = tools.get_account_data(account_id, **args)
+            elif name == "create_escalation_draft":
+                result = tools.create_escalation_draft(account_id, **args)
+                if "error" not in result:
+                    pending_action = {"account_id": account_id, **args}
+            else:
+                result = {"error": f"Unknown tool {name}"}
 
-        response = chat.send_message(genai.protos.Content(parts=[genai.protos.Part(
-            function_response=genai.protos.FunctionResponse(name=name, response={"result": result})
-        )]))
+            response_parts.append(genai.protos.Part(
+                function_response=genai.protos.FunctionResponse(name=name, response={"result": result})
+            ))
+
+        # Every function call from this turn must be answered in the same message,
+        # in the same order, or the model is left waiting on the ones we skipped.
+        response = _send_with_retry(chat, genai.protos.Content(parts=response_parts))
 
     return _response_text(response), tool_log, pending_action

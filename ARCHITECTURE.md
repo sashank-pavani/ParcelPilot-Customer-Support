@@ -13,6 +13,13 @@ Gemini (`gemini-2.0-flash`), with exactly **three tools**, one per required cate
 | `get_account_data` | Structured-data lookup + calculation | Scoped lookup of the logged-in account's orders/tickets, plus deterministic cancellation-fee, service-credit, and SLA calculations |
 | `create_escalation_draft` | State-changing action (mocked) | Drafts an escalation; only actually recorded after an explicit user confirmation click in the UI |
 
+Model: `gemini-3.5-flash-lite`, picked empirically -- a couple of newer Gemini models
+supported function calling but had very restrictive free-tier quotas (as low as 20
+requests/day), which isn't workable for a demo a reviewer will actually click through.
+`gemini-3.5-flash-lite` had the most headroom of the models tried. `agent.py` also
+retries once or twice with backoff on a 429, since a short tool-heavy exchange can
+otherwise trip even a generous free-tier limit.
+
 ## Agent design
 
 The tool loop (`agent.py`) is deliberately **manual**, not the SDK's automatic
@@ -112,12 +119,13 @@ three concrete mechanisms rather than a generic policy statement:
   handful of structured tables, an in-memory numpy similarity search and pandas
   filtering are simpler to read, debug, and explain than adding infrastructure that
   would only start paying off at a much larger corpus size.
-- **Single Gemini call per tool round, no parallel tool calls.** The loop handles one
-  function call per model turn. Gemini can request multiple tools in one turn; this
-  implementation takes the first and lets the next round of the loop pick up any
-  others, which is simple but slightly less efficient than batching them. Not
-  observed to cause incorrect answers in testing, since the model naturally sequences
-  dependent lookups (account → order → policy) one at a time anyway.
+- **Parallel tool calls, answered together.** Gemini sometimes requests two tools in
+  one turn (e.g. `get_account_data` and `search_policies` together). Early testing
+  showed that answering only the first and dropping the second left the model stuck
+  restating the same call with an empty final answer — the API expects a
+  `function_response` for every `function_call` it made, in the same message. The
+  loop now executes every call from a turn and returns all of their results together
+  before the model continues.
 - **One chatbot, customer-facing.** The assessment allows building only one; an
   internal ops/investigation chatbot and a proactive issue-detection view were scoped
   out of this submission (see the Product Note for what that would look like).

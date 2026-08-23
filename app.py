@@ -16,13 +16,15 @@ st.set_page_config(page_title="ParcelPilot Support", page_icon="📦", layout="c
 
 
 def get_api_key():
+    # Checked in this order so a local .env run never touches st.secrets at all --
+    # accessing it with no secrets.toml present prints a distracting warning banner.
+    if os.environ.get("GEMINI_API_KEY"):
+        return os.environ["GEMINI_API_KEY"]
     try:
         if "GEMINI_API_KEY" in st.secrets:
             return st.secrets["GEMINI_API_KEY"]
     except Exception:
         pass
-    if os.environ.get("GEMINI_API_KEY"):
-        return os.environ["GEMINI_API_KEY"]
     return st.session_state.get("manual_api_key")
 
 

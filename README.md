@@ -41,6 +41,12 @@ GEMINI_API_KEY=your-actual-key-here
 (If you skip this, the app will ask for a key in the sidebar instead — handy for a
 one-off local test, but `.env` is the normal way to run it.)
 
+The app defaults to `gemini-3.5-flash-lite`, chosen after testing a few Gemini models
+against this free-tier key: it supports function calling and had the most generous
+free rate limit of the ones tried. If your key hits a different model's free-tier
+limits, override it without touching code by setting `GEMINI_MODEL` in `.env`. A
+short burst of rate-limit errors is also retried automatically (see `agent.py`).
+
 ## 2. Run it locally
 
 ```bash

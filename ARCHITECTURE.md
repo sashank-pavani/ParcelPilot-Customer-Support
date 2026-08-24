@@ -3,9 +3,10 @@
 ## Overview
 
 A single Python/Streamlit app implements a customer-facing support chatbot for
-ParcelPilot. One authenticated customer account is "logged in" (mocked via a sidebar
-selector) per session. The agent is a small manual tool-calling loop around Google
-Gemini (`gemini-2.0-flash`), with exactly **three tools**, one per required category:
+ParcelPilot. One authenticated customer account is "logged in" per session through a
+mocked login form (see Access control below). The agent is a small manual
+tool-calling loop around Google Gemini, with exactly **three tools**, one per
+required category:
 
 | Tool | Category | What it does |
 |---|---|---|
@@ -58,7 +59,7 @@ both for debugging and for confirming the logic before ever spending an API call
 
 - **Documents** (`documents.py`): each PDF is text-extracted with `pypdf`, split into
   paragraph-sized chunks (~150+ chars, merging short headings into the following
-  paragraph), and embedded with Gemini's `text-embedding-004` model. Retrieval is
+  paragraph), and embedded with Gemini's `gemini-embedding-001` model. Retrieval is
   cosine similarity over an in-memory list — no vector database, since the corpus is
   six one-page documents (a few dozen chunks total). Every chunk carries its source
   filename and a hand-set status label (`CURRENT`, `DEPRECATED`, or `ACTIVE signed
@@ -66,11 +67,21 @@ both for debugging and for confirming the logic before ever spending an API call
   result instead of inferring it from filenames.
 - **Structured data** (`data_store.py`): the supplied workbook (accounts, orders,
   tickets) is loaded once with pandas. Every read function takes `account_id` as a
-  parameter supplied by the app layer (from the mocked session), not by the model —
-  `get_order`/`get_ticket` filter on `account_id` *before* returning anything, so a
-  request for another account's order ID simply returns "not found," never a
+  parameter supplied by the app layer (from the authenticated session), not by the
+  model — `get_order`/`get_ticket` filter on `account_id` *before* returning anything,
+  so a request for another account's order ID simply returns "not found," never a
   cross-account leak. This is the access-control boundary the assessment asks for,
   and it lives in the data layer, not in prompt instructions.
+- **Mocked authentication, account context, and roles**: the app opens on a real login
+  form (`app.py`) — username is an account ID, password is a fixed demo value shown
+  on screen — rather than a picker, so the login step is a genuine gate the model has
+  no visibility into, not just a UI convenience. Once authenticated, `account_id` is
+  held server-side in the session and threaded into every tool call the same way
+  described above. Roles were deliberately not modeled beyond this: a customer-facing
+  bot has exactly one role ("this account's customer"), so a role hierarchy would be
+  invented complexity with nothing in the data to justify it. Roles become meaningful
+  the moment an *internal* ops chatbot is added (support agent vs. team lead vs.
+  admin, each scoped to different accounts/actions) — see the Product Note.
 
 ## Source reliability and conflict handling
 

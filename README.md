@@ -53,8 +53,9 @@ short burst of rate-limit errors is also retried automatically (see `agent.py`).
 streamlit run app.py
 ```
 
-This opens the chat UI at `http://localhost:8501`. Pick a demo account in the sidebar
-("Logged in as") and click **Start / restart conversation**.
+This opens the chat UI at `http://localhost:8501`. Log in with any account ID as the
+username (e.g. `ACCT-001`) and the demo password `cust1234` (shown on the login
+screen itself). Use the sidebar's **Log out** button to switch accounts.
 
 Optional — sanity-check the deterministic business logic (fees/credits/SLAs) without
 any API key or network access:
@@ -65,11 +66,11 @@ python sanity_check.py
 
 ## 3. Try it
 
-Pick **Northstar Logistics (ACCT-001)** and ask:
+Log in as **ACCT-001** (Northstar Logistics) and ask:
 
 > Can I cancel ORD-1001 without a cancellation fee? Explain why.
 
-Pick **LumenWorks (ACCT-002)** and ask:
+Log out, log back in as **ACCT-002** (LumenWorks), and ask:
 
 > A pickup on order ORD-2002 is late because of carrier fault. Am I owed a service credit?
 

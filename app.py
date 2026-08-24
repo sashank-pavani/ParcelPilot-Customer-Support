@@ -14,6 +14,12 @@ load_dotenv()
 
 st.set_page_config(page_title="ParcelPilot Support", page_icon="📦", layout="centered")
 
+# Mocked login only -- every account shares one demo password. A real deployment
+# would replace this whole block with ParcelPilot's actual customer identity
+# provider; nothing downstream needs to change since every tool call is scoped by
+# account_id regardless of how that id was established.
+DEMO_PASSWORD = "cust1234"
+
 
 def get_api_key():
     # Checked in this order so a local .env run never touches st.secrets at all --
@@ -40,6 +46,30 @@ def init_chat(api_key: str, account_id: str):
     st.session_state.pending_action = None
 
 
+def login_screen():
+    st.subheader("🔒 Customer Login")
+    demo_ids = ", ".join(f"`{a['account_id']}`" for a in data_store.list_accounts())
+    st.info(
+        f"**Demo login for this assessment** — Username: any of {demo_ids} · "
+        f"Password: `{DEMO_PASSWORD}` (same for every account). A real deployment "
+        f"would sit behind ParcelPilot's actual customer identity provider instead."
+    )
+    with st.form("login_form"):
+        username = st.text_input("Username (account ID)", placeholder="ACCT-001")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Log in", type="primary")
+
+    if submitted:
+        account = data_store.get_account(username.strip().upper())
+        if account is None:
+            st.error("Unknown username. Try one of the account IDs shown above.")
+        elif password != DEMO_PASSWORD:
+            st.error("Incorrect password.")
+        else:
+            st.session_state.authenticated_account = account["account_id"]
+            st.rerun()
+
+
 st.title("📦 ParcelPilot Support")
 st.caption("AI Agent Assessment demo — customer-facing support chatbot")
 
@@ -55,30 +85,20 @@ with st.sidebar:
             st.session_state.manual_api_key = manual_key
             api_key = manual_key
 
-    accounts = data_store.list_accounts()
-    option_labels = {
-        f"{a['account_name']} ({a['account_id']}, {a['plan']})": a["account_id"]
-        for a in accounts
-    }
-    chosen_label = st.selectbox("Logged in as (mocked auth)", list(option_labels.keys()))
-    chosen_account = option_labels[chosen_label]
-
-    if st.button("Start / restart conversation", type="primary", disabled=not api_key):
-        agent.configure(api_key)
-        init_chat(api_key, chosen_account)
-        st.rerun()
-
-    if st.session_state.get("account_id") and st.session_state.account_id != chosen_account:
-        st.info("Account changed — click 'Start / restart conversation' to log in as "
-                "the new account. The chatbot never re-scopes an existing conversation "
-                "to a different account on its own.")
+    if st.session_state.get("authenticated_account"):
+        account = data_store.get_account(st.session_state.authenticated_account)
+        st.success(f"Logged in as **{account['account_name']}**\n\n"
+                   f"({account['account_id']}, {account['plan']})")
+        if st.button("Log out"):
+            for key in ("authenticated_account", "chat", "messages", "pending_action", "account_id"):
+                st.session_state.pop(key, None)
+            st.rerun()
 
     st.divider()
     st.caption(
-        "This selector mocks authentication. In production the account would come "
-        "from a real login session, never from user-typed input — and every tool "
-        "call is scoped server-side to that account, so the chatbot cannot be asked "
-        "to fetch another customer's data."
+        "Login is mocked for this demo, but the boundary it protects is real: every "
+        "tool call is scoped server-side to the logged-in account_id, so the chatbot "
+        "cannot be asked to fetch another customer's data no matter how it's prompted."
     )
 
 if not api_key:
@@ -88,8 +108,13 @@ if not api_key:
 agent.configure(api_key)
 index = get_document_index(api_key[:12])
 
+if not st.session_state.get("authenticated_account"):
+    login_screen()
+    st.stop()
+
+account_id = st.session_state.authenticated_account
 if "chat" not in st.session_state:
-    init_chat(api_key, chosen_account)
+    init_chat(api_key, account_id)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):

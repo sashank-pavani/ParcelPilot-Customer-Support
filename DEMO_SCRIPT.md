@@ -36,14 +36,15 @@ script in a second window/monitor to read from. Free tools: Windows's built-in
 
 *Switch to the running app.*
 
-1. **Contract override.** Log in as **Northstar Logistics (ACCT-001)**. Ask:
+1. **Contract override.** Log in with username **ACCT-001**, password **cust1234**
+   (both shown right on the login screen — this is Northstar Logistics). Ask:
    > "Can I cancel ORD-1001 without a cancellation fee? Explain why."
 
    Point out the answer cites the *signed agreement* overriding the *default SOP*,
    and expand "🔧 Tools used" to show `get_account_data` and `search_policies` ran.
 
-2. **Contract-specific numbers, not the default.** Log in as **LumenWorks
-   (ACCT-002)**. Ask:
+2. **Contract-specific numbers, not the default.** Click **Log out** in the sidebar,
+   log back in as **ACCT-002** (LumenWorks), same password. Ask:
    > "A pickup on ORD-2001 is 3 hours late because of carrier fault — do I get a
    > service credit?"
 

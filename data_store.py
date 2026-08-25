@@ -80,6 +80,10 @@ def _load_escalations():
     return []
 
 
+def list_escalations_for_account(account_id: str):
+    return [e for e in _load_escalations() if e["account_id"] == account_id]
+
+
 def create_escalation_record(account_id: str, category: str, summary: str,
                               order_id: str | None, ticket_id: str | None):
     """Mocked state-changing action: appends a new escalation to a local JSON file.
@@ -93,6 +97,10 @@ def create_escalation_record(account_id: str, category: str, summary: str,
         "summary": summary,
         "order_id": order_id,
         "ticket_id": ticket_id,
+        # This mock has no support team actually working the queue, so every
+        # escalation sits at "submitted" forever -- stated plainly rather than
+        # fabricating a status the system has no way to know.
+        "status": "submitted (this demo does not simulate support-team resolution)",
         "created_at": NOW.strftime("%Y-%m-%d %H:%M"),
     }
     escalations.append(record)

@@ -79,6 +79,11 @@ def get_account_data(account_id: str, order_id: str | None = None,
         },
         "sla_targets": sla_targets,
         "contract_notes": (overrides or {}).get("notes", []),
+        # Always included (not just when asked "list my stuff") so a follow-up like
+        # "what's the status of ESC-1001" is answerable without a separate tool --
+        # the alternative, an escalation_id lookup parameter, failed in practice
+        # because the model had no reason to know an escalation tool existed.
+        "escalations_on_this_account": data_store.list_escalations_for_account(account_id),
     }
 
     if order_id:

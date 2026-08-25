@@ -126,6 +126,14 @@ three concrete mechanisms rather than a generic policy statement:
 - **"Now" is the dataset snapshot time**, read from the workbook's README sheet at
   load time (not hardcoded), per the assessment's own instruction to treat it as the
   reference time for all time-based questions.
+- **Escalation status is always returned, not looked up on demand.** The action tool
+  can *create* an escalation, but early manual testing found the agent had no way to
+  answer "what's the status of ESC-1001" afterward -- there was simply no tool result
+  containing that information. Rather than add a fourth tool (`get_escalation`) that
+  the model would have to remember exists, `get_account_data` now always includes
+  every escalation filed on the account in its response, the same way it already
+  always includes contract notes. One consistent tool covers both filing and
+  status-checking.
 - **No vector database, no framework (LangChain/etc.).** At six documents and a
   handful of structured tables, an in-memory numpy similarity search and pandas
   filtering are simpler to read, debug, and explain than adding infrastructure that

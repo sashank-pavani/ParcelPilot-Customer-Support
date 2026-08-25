@@ -51,12 +51,16 @@ TOOL_SCHEMA = [{
         {
             "name": "get_account_data",
             "description": (
-                "Look up the logged-in customer's own account, orders, and tickets, "
-                "and get deterministic calculations: cancellation fee, service-credit "
-                "eligibility and amount, and SLA target vs. elapsed time. Only ever "
-                "returns data for the current account. Pass severity ('P1', 'P2', or "
-                "'P3') once you have classified a ticket's severity, to check it "
-                "against the SLA target."
+                "Look up the logged-in customer's own account, orders, tickets, and "
+                "any escalations already filed on this account (including their "
+                "status), plus deterministic calculations: cancellation fee, "
+                "service-credit eligibility and amount, and SLA target vs. elapsed "
+                "time. Call this (with no arguments) to answer a follow-up question "
+                "about a previously created escalation, e.g. its ID or status -- "
+                "escalations are always included in the response. Only ever returns "
+                "data for the current account. Pass severity ('P1', 'P2', or 'P3') "
+                "once you have classified a ticket's severity, to check it against "
+                "the SLA target."
             ),
             "parameters": {
                 "type": "object",
@@ -116,7 +120,10 @@ softening it. If the request needs human judgment, an exception to policy, or an
 action you cannot perform, or if key facts are missing or contradictory, prepare an \
 escalation with create_escalation_draft and explain why -- do not guess or promise an \
 outcome you are not sure of. An escalation only takes effect once the user confirms \
-it in the interface.
+it in the interface. If asked about the status of an escalation created earlier in \
+this conversation (by its ID or otherwise), call get_account_data -- its response \
+always includes every escalation filed on this account. Never claim an escalation \
+does not exist without having just checked there.
 
 Be concise and specific. When you state a policy fact, name the source document and \
 whether it is current, deprecated, or a signed agreement."""

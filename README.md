@@ -103,6 +103,7 @@ documents.py          PDF chunking + embedding search over the policy/contract d
 data_store.py        Loads the workbook; account-scoped data access; escalation log
 sanity_check.py       Offline check of business_rules against the real dataset
 data/                 The supplied data pack (PDFs + workbook) + generated escalations.json
+.streamlit/config.toml  App theme (colors/fonts) -- no code, just Streamlit's native theming
 ARCHITECTURE.md       Architecture note (required submission doc)
 PRODUCT_NOTE.md       Product note (required submission doc)
 ```

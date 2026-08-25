@@ -20,6 +20,95 @@ st.set_page_config(page_title="ParcelPilot Support", page_icon="📦", layout="c
 # account_id regardless of how that id was established.
 DEMO_PASSWORD = "cust1234"
 
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+.block-container { padding-top: 2.25rem; max-width: 760px; }
+
+.pp-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #E5E9F0;
+}
+.pp-header .pp-mark {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #2E5EAA, #1B3E7A);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 0.95rem;
+    flex-shrink: 0;
+}
+.pp-header .pp-name { font-size: 1.35rem; font-weight: 700; color: #1B2430; }
+.pp-header .pp-sep { color: #C6CCD6; font-weight: 400; }
+.pp-header .pp-tagline { font-size: 1.0rem; color: #6B7280; font-weight: 500; }
+
+.pp-card {
+    background: #FBFCFD;
+    border: 1px solid #E5E9F0;
+    border-radius: 12px;
+    padding: 1.5rem 1.6rem 0.9rem 1.6rem;
+    margin-bottom: 1.2rem;
+}
+.pp-card h3 { margin-top: 0; }
+.pp-hint {
+    font-size: 0.85rem;
+    color: #5B6472;
+    background: #F1F5FB;
+    border: 1px solid #DCE5F2;
+    border-radius: 8px;
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 1.1rem;
+    line-height: 1.5;
+}
+.pp-hint code {
+    background: #E4ECF9; padding: 1px 5px; border-radius: 4px; color: #1B3E7A;
+}
+
+.pp-plan-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #1B3E7A;
+    background: #E4ECF9;
+    border-radius: 5px;
+    padding: 2px 7px;
+    margin-left: 6px;
+}
+
+[data-testid="stChatMessage"] {
+    border-radius: 12px;
+    padding: 0.9rem 1.05rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid #ECEFF3;
+}
+
+[data-testid="stExpander"] {
+    border: none;
+    background: transparent;
+}
+[data-testid="stExpander"] summary {
+    font-size: 0.8rem;
+    color: #6B7280;
+    font-weight: 500;
+}
+[data-testid="stExpander"] summary:hover { color: #2E5EAA; }
+
+section[data-testid="stSidebar"] { border-right: 1px solid #E5E9F0; }
+section[data-testid="stSidebar"] .block-container { padding-top: 1.75rem; }
+
+footer, #MainMenu { visibility: hidden; }
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 
 def get_api_key():
     # Checked in this order so a local .env run never touches st.secrets at all --
@@ -34,7 +123,7 @@ def get_api_key():
     return st.session_state.get("manual_api_key")
 
 
-@st.cache_resource(show_spinner="Indexing policy documents...")
+@st.cache_resource(show_spinner="Setting things up...")
 def get_document_index(api_key_fingerprint: str):
     return agent.build_document_index()
 
@@ -47,62 +136,78 @@ def init_chat(api_key: str, account_id: str):
 
 
 def login_screen():
-    st.subheader("🔒 Customer Login")
-    demo_ids = ", ".join(f"`{a['account_id']}`" for a in data_store.list_accounts())
-    st.info(
-        f"**Demo login for this assessment** — Username: any of {demo_ids} · "
-        f"Password: `{DEMO_PASSWORD}` (same for every account). A real deployment "
-        f"would sit behind ParcelPilot's actual customer identity provider instead."
-    )
-    with st.form("login_form"):
-        username = st.text_input("Username (account ID)", placeholder="ACCT-001")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Log in", type="primary")
+    _, mid, _ = st.columns([1, 4, 1])
+    with mid:
+        st.markdown('<div class="pp-card">', unsafe_allow_html=True)
+        st.markdown("### Sign in")
+        demo_ids = ", ".join(f"<code>{a['account_id']}</code>" for a in data_store.list_accounts())
+        st.markdown(
+            f'<div class="pp-hint">Demo access for this walkthrough — username: '
+            f'{demo_ids} · password: <code>{DEMO_PASSWORD}</code> for every account.</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="ACCT-001")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    if submitted:
-        account = data_store.get_account(username.strip().upper())
-        if account is None:
-            st.error("Unknown username. Try one of the account IDs shown above.")
-        elif password != DEMO_PASSWORD:
-            st.error("Incorrect password.")
-        else:
-            st.session_state.authenticated_account = account["account_id"]
-            st.rerun()
+        if submitted:
+            account = data_store.get_account(username.strip().upper())
+            if account is None:
+                st.error("We couldn't find that account. Check the username and try again.")
+            elif password != DEMO_PASSWORD:
+                st.error("That password doesn't match.")
+            else:
+                st.session_state.authenticated_account = account["account_id"]
+                st.rerun()
 
 
-st.title("📦 ParcelPilot Support")
-st.caption("AI Agent Assessment demo — customer-facing support chatbot")
+st.markdown(
+    '<div class="pp-header">'
+    '<span class="pp-mark">PP</span>'
+    '<span class="pp-name">ParcelPilot</span>'
+    '<span class="pp-sep">/</span>'
+    '<span class="pp-tagline">Support</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 api_key = get_api_key()
 
 with st.sidebar:
-    st.header("Session")
-
     if not api_key:
-        st.warning("No Gemini API key found in secrets or .env.")
-        manual_key = st.text_input("Enter a Gemini API key to try the demo", type="password")
+        st.warning("No Gemini API key configured.")
+        manual_key = st.text_input("API key", type="password", label_visibility="collapsed",
+                                    placeholder="Paste a Gemini API key to try this")
         if manual_key:
             st.session_state.manual_api_key = manual_key
             api_key = manual_key
 
     if st.session_state.get("authenticated_account"):
         account = data_store.get_account(st.session_state.authenticated_account)
-        st.success(f"Logged in as **{account['account_name']}**\n\n"
-                   f"({account['account_id']}, {account['plan']})")
-        if st.button("Log out"):
+        st.markdown("**Account**")
+        st.markdown(
+            f"{account['account_name']}"
+            f'<span class="pp-plan-badge">{account["plan"]}</span>',
+            unsafe_allow_html=True,
+        )
+        st.caption(account["account_id"])
+        st.write("")
+        if st.button("Sign out", use_container_width=True):
             for key in ("authenticated_account", "chat", "messages", "pending_action", "account_id"):
                 st.session_state.pop(key, None)
             st.rerun()
+        st.divider()
 
-    st.divider()
     st.caption(
-        "Login is mocked for this demo, but the boundary it protects is real: every "
-        "tool call is scoped server-side to the logged-in account_id, so the chatbot "
-        "cannot be asked to fetch another customer's data no matter how it's prompted."
+        "Login is mocked for this walkthrough, but the boundary it protects is real: "
+        "every lookup is scoped server-side to the signed-in account, so it can't be "
+        "asked to return another customer's data."
     )
 
 if not api_key:
-    st.info("Add a Gemini API key in the sidebar to start chatting.")
+    st.info("Add a Gemini API key in the sidebar to continue.")
     st.stop()
 
 agent.configure(api_key)
@@ -117,25 +222,25 @@ if "chat" not in st.session_state:
     init_chat(api_key, account_id)
 
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar="📦" if message["role"] == "assistant" else None):
         if message.get("tool_log"):
-            with st.expander("🔧 Tools used"):
+            with st.expander("View reasoning steps"):
                 for call in message["tool_log"]:
                     st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(message["content"])
 
 if st.session_state.get("pending_action"):
     pending = st.session_state.pending_action
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="📦"):
         st.warning(
-            f"**Escalation ready to create — not yet created**\n\n"
+            f"**This hasn't been submitted yet — review before confirming**\n\n"
             f"- Category: `{pending['category']}`\n"
             f"- Summary: {pending['summary']}\n"
             f"- Order: {pending.get('order_id') or '—'}\n"
             f"- Ticket: {pending.get('ticket_id') or '—'}"
         )
         col1, col2 = st.columns(2)
-        if col1.button("✅ Confirm and create escalation", type="primary"):
+        if col1.button("Confirm and submit", type="primary", use_container_width=True):
             record = data_store.create_escalation_record(
                 account_id=st.session_state.account_id,
                 category=pending["category"],
@@ -146,14 +251,14 @@ if st.session_state.get("pending_action"):
             st.session_state.pending_action = None
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": f"✅ Escalation **{record['escalation_id']}** created and "
-                           f"routed to the support team.",
+                "content": f"Escalation **{record['escalation_id']}** has been created "
+                           f"and routed to the support team.",
             })
             st.rerun()
-        if col2.button("Cancel"):
+        if col2.button("Cancel", use_container_width=True):
             st.session_state.pending_action = None
             st.session_state.messages.append({
-                "role": "assistant", "content": "Okay — I have not created that escalation.",
+                "role": "assistant", "content": "Understood — that hasn't been submitted.",
             })
             st.rerun()
 
@@ -166,13 +271,13 @@ if user_message:
     with st.chat_message("user"):
         st.markdown(user_message)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+    with st.chat_message("assistant", avatar="📦"):
+        with st.spinner("Looking into it..."):
             reply, tool_log, pending = agent.run_turn(
                 st.session_state.chat, st.session_state.account_id, index, user_message,
             )
         if tool_log:
-            with st.expander("🔧 Tools used"):
+            with st.expander("View reasoning steps"):
                 for call in tool_log:
                     st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(reply)

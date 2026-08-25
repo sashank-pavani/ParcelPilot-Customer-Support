@@ -41,7 +41,7 @@ script in a second window/monitor to read from. Free tools: Windows's built-in
    > "Can I cancel ORD-1001 without a cancellation fee? Explain why."
 
    Point out the answer cites the *signed agreement* overriding the *default SOP*,
-   and expand "🔧 Tools used" to show `get_account_data` and `search_policies` ran.
+   and expand "View reasoning steps" to show `get_account_data` and `search_policies` ran.
 
 2. **Contract-specific numbers, not the default.** Click **Log out** in the sidebar,
    log back in as **ACCT-002** (LumenWorks), same password. Ask:

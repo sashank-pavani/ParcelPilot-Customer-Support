@@ -1,34 +1,20 @@
 """Loads the six policy/contract/product PDFs, splits them into small chunks, and
-answers similarity-search queries using Gemini text-embedding-004.
+answers similarity-search queries using sentence-transformers (local embedding model).
 
 Kept intentionally simple: an in-memory list of (text, metadata, embedding) records
 and numpy cosine similarity. At this scale -- six short documents, a few dozen chunks
 -- a real vector database would be pure overhead.
 """
-import os
 import re
 from pathlib import Path
 
 import numpy as np
 from pypdf import PdfReader
-from google import genai
+from sentence_transformers import SentenceTransformer
 
 DATA_DIR = Path(__file__).parent / "data"
-EMBED_MODEL = "text-embedding-004"
-_client = None
+EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
-
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        _client = genai.Client(api_key=api_key)
-    return _client
-
-
-# Status metadata the agent should use to weigh source authority. A signed agreement
-# outranks the current policy, which outranks product docs; the deprecated policy is
-# kept only as historical context and must never be cited as current guidance.
 DOCUMENT_METADATA = {
     "01_Support_Policy_v3_CURRENT.pdf": {
         "status": "CURRENT", "kind": "support policy"},
@@ -70,7 +56,6 @@ def _extract_chunks(pdf_path: Path, min_len: int = 150):
 def build_index():
     """Reads every PDF in data/, chunks it, and embeds each chunk. Returns a list of
     dicts: {text, source_file, status, kind, embedding}. Call once per app process."""
-    client = _get_client()
     records = []
     for pdf_path in sorted(DATA_DIR.glob("*.pdf")):
         meta = DOCUMENT_METADATA.get(pdf_path.name, {"status": "unknown", "kind": "document"})
@@ -78,16 +63,14 @@ def build_index():
             records.append({"text": chunk, "source_file": pdf_path.name, **meta})
 
     texts = [r["text"] for r in records]
-    result = client.models.embed_content(model=EMBED_MODEL, contents=texts)
-    for record, emb in zip(records, result.embeddings):
-        record["embedding"] = np.array(emb.values)
+    embeddings = EMBED_MODEL.encode(texts, convert_to_numpy=True)
+    for record, embedding in zip(records, embeddings):
+        record["embedding"] = embedding
     return records
 
 
 def search(index, query: str, top_k: int = 4):
-    client = _get_client()
-    result = client.models.embed_content(model=EMBED_MODEL, contents=query)
-    query_vec = np.array(result.embeddings[0].values)
+    query_vec = EMBED_MODEL.encode(query, convert_to_numpy=True)
 
     scored = []
     for record in index:

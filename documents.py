@@ -1,5 +1,5 @@
 """Loads the six policy/contract/product PDFs, splits them into small chunks, and
-answers similarity-search queries using Gemini's embedding model.
+answers similarity-search queries using Gemini text-embedding-004 (free tier).
 
 Kept intentionally simple: an in-memory list of (text, metadata, embedding) records
 and numpy cosine similarity. At this scale -- six short documents, a few dozen chunks
@@ -11,11 +11,10 @@ from pathlib import Path
 
 import numpy as np
 from pypdf import PdfReader
-
 import google.generativeai as genai
 
 DATA_DIR = Path(__file__).parent / "data"
-EMBED_MODEL = "models/gemini-embedding-001"
+EMBED_MODEL = "models/text-embedding-004"
 
 # Status metadata the agent should use to weigh source authority. A signed agreement
 # outranks the current policy, which outranks product docs; the deprecated policy is
@@ -40,14 +39,9 @@ DOCUMENT_METADATA = {
 
 
 def _ensure_gemini():
-    """Document search still uses Gemini embeddings, even though chat uses Groq."""
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is missing. Chat uses Groq, but PDF search still needs "
-            "a Gemini key in .env for embeddings."
-        )
-    genai.configure(api_key=key)
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
 
 
 def _extract_chunks(pdf_path: Path, min_len: int = 150):
@@ -72,6 +66,7 @@ def _extract_chunks(pdf_path: Path, min_len: int = 150):
 def build_index():
     """Reads every PDF in data/, chunks it, and embeds each chunk. Returns a list of
     dicts: {text, source_file, status, kind, embedding}. Call once per app process."""
+    _ensure_gemini()
     records = []
     for pdf_path in sorted(DATA_DIR.glob("*.pdf")):
         meta = DOCUMENT_METADATA.get(pdf_path.name, {"status": "unknown", "kind": "document"})
@@ -79,7 +74,6 @@ def build_index():
             records.append({"text": chunk, "source_file": pdf_path.name, **meta})
 
     texts = [r["text"] for r in records]
-    _ensure_gemini()
     result = genai.embed_content(model=EMBED_MODEL, content=texts, task_type="retrieval_document")
     for record, embedding in zip(records, result["embedding"]):
         record["embedding"] = np.array(embedding)

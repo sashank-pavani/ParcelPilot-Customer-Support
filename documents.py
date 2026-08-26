@@ -5,6 +5,7 @@ Kept intentionally simple: an in-memory list of (text, metadata, embedding) reco
 and numpy cosine similarity. At this scale -- six short documents, a few dozen chunks
 -- a real vector database would be pure overhead.
 """
+import os
 import re
 from pathlib import Path
 
@@ -38,6 +39,17 @@ DOCUMENT_METADATA = {
 }
 
 
+def _ensure_gemini():
+    """Document search still uses Gemini embeddings, even though chat uses Groq."""
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "GEMINI_API_KEY is missing. Chat uses Groq, but PDF search still needs "
+            "a Gemini key in .env for embeddings."
+        )
+    genai.configure(api_key=key)
+
+
 def _extract_chunks(pdf_path: Path, min_len: int = 150):
     reader = PdfReader(str(pdf_path))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
@@ -67,6 +79,7 @@ def build_index():
             records.append({"text": chunk, "source_file": pdf_path.name, **meta})
 
     texts = [r["text"] for r in records]
+    _ensure_gemini()
     result = genai.embed_content(model=EMBED_MODEL, content=texts, task_type="retrieval_document")
     for record, embedding in zip(records, result["embedding"]):
         record["embedding"] = np.array(embedding)
@@ -74,6 +87,7 @@ def build_index():
 
 
 def search(index, query: str, top_k: int = 4):
+    _ensure_gemini()
     result = genai.embed_content(model=EMBED_MODEL, content=query, task_type="retrieval_query")
     query_vec = np.array(result["embedding"])
 

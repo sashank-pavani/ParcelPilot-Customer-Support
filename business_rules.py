@@ -118,6 +118,10 @@ def evaluate_cancellation(order: dict, overrides: dict | None, now) -> dict:
                       f"the default fee is INR {fee}.",
         }
 
+    if status == "CANCELLED":
+        return {"cancellable": False, "fee_inr": None,
+                "reason": "This shipment is already cancelled."}
+
     if status == "PICKED_UP":
         return {"cancellable": False, "fee_inr": None,
                 "reason": f"This shipment has already been picked up, so cancellation is "
@@ -205,3 +209,37 @@ def evaluate_sla_breach(ticket: dict, severity: str, targets: dict, now) -> dict
                 "minutes, not a business-hour calendar, so treat comparisons against "
                 "multi-hour or multi-day targets as approximate.",
     }
+
+
+def evaluate_order_delay(order: dict, now) -> dict:
+    """Flag orders stuck in BOOKED status past their pickup window -- carrier never showed."""
+    status = order.get("status")
+    pickup_window_end = order.get("pickup_window_end")
+    pickup_actual = order.get("pickup_actual_at")
+
+    if pd.isna(pickup_window_end):
+        return {"problem": False, "days_stuck": None, "alert": None}
+
+    if status == "DELIVERED":
+        return {"problem": False, "days_stuck": None, "alert": None}
+
+    if status == "PICKED_UP" and not pd.isna(pickup_actual):
+        return {"problem": False, "days_stuck": None, "alert": None}
+
+    # Still BOOKED and past pickup window = carrier never showed
+    if status == "BOOKED":
+        minutes_past = _minutes_between(now, pickup_window_end)
+        if minutes_past is not None and minutes_past > 0:
+            days_stuck = round(minutes_past / (24 * 60), 1)
+            if days_stuck > 1:  # More than 1 day is a real problem
+                return {
+                    "problem": True,
+                    "days_stuck": days_stuck,
+                    "alert": f"SHIPMENT STUCK: Order has been waiting for pickup for {days_stuck} days (since pickup window on {pickup_window_end.strftime('%b %d')}). Carrier may not have shown up. This requires investigation.",
+                }
+            else:
+                return {"problem": False, "days_stuck": days_stuck, "alert": None}
+        else:
+            return {"problem": False, "days_stuck": 0, "alert": None}
+
+    return {"problem": False, "days_stuck": None, "alert": None}

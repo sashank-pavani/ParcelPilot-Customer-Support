@@ -2,22 +2,19 @@
 
 Run with: streamlit run app.py
 """
-import os
+import os #imports os file to interact with the operating system
 
 import streamlit as st
-from dotenv import load_dotenv
+from dotenv import load_dotenv #imports dotenv file to load the environment variables
 
-import agent
-import data_store
+import agent #imports agents.py file
+import data_store #imports data_store.py file
 
 load_dotenv()
 
 st.set_page_config(page_title="ParcelPilot Support", page_icon="📦", layout="centered")
 
-# Mocked login only -- every account shares one demo password. A real deployment
-# would replace this whole block with ParcelPilot's actual customer identity
-# provider; nothing downstream needs to change since every tool call is scoped by
-# account_id regardless of how that id was established.
+# Defining the password for all the accounts as this is a demo app.
 DEMO_PASSWORD = "cust1234"
 
 CUSTOM_CSS = """
@@ -113,11 +110,11 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def get_api_key():
     # Checked in this order so a local .env run never touches st.secrets at all --
     # accessing it with no secrets.toml present prints a distracting warning banner.
-    if os.environ.get("GEMINI_API_KEY"):
-        return os.environ["GEMINI_API_KEY"]
+    if os.environ.get("GROQ_API_KEY"):
+        return os.environ["GROQ_API_KEY"]
     try:
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
+        if "GROQ_API_KEY" in st.secrets:
+            return st.secrets["GROQ_API_KEY"]
     except Exception:
         pass
     return st.session_state.get("manual_api_key")
@@ -177,9 +174,9 @@ api_key = get_api_key()
 
 with st.sidebar:
     if not api_key:
-        st.warning("No Gemini API key configured.")
+        st.warning("No Groq API key configured.")
         manual_key = st.text_input("API key", type="password", label_visibility="collapsed",
-                                    placeholder="Paste a Gemini API key to try this")
+              placeholder="Paste a Groq API key to try this")
         if manual_key:
             st.session_state.manual_api_key = manual_key
             api_key = manual_key
@@ -223,39 +220,61 @@ if "chat" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar="📦" if message["role"] == "assistant" else None):
-        if message.get("tool_log"):
-            with st.expander("View reasoning steps"):
-                for call in message["tool_log"]:
-                    st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(message["content"])
 
 if st.session_state.get("pending_action"):
     pending = st.session_state.pending_action
+    kind = pending.get("kind", "escalation")
     with st.chat_message("assistant", avatar="📦"):
-        st.warning(
-            f"**This hasn't been submitted yet — review before confirming**\n\n"
-            f"- Category: `{pending['category']}`\n"
-            f"- Summary: {pending['summary']}\n"
-            f"- Order: {pending.get('order_id') or '—'}\n"
-            f"- Ticket: {pending.get('ticket_id') or '—'}"
-        )
+        if kind == "cancel_order":
+            fee = pending.get("fee_inr")
+            fee_text = "₹0" if fee == 0 else (f"₹{fee}" if fee is not None else "—")
+            st.warning(
+                f"**This cancellation hasn't been applied yet — review before confirming**\n\n"
+                f"- Order: `{pending.get('order_id')}`\n"
+                f"- Cancellation fee: {fee_text}\n"
+                f"- {pending.get('reason') or ''}"
+            )
+        else:
+            st.warning(
+                f"**This hasn't been submitted yet — review before confirming**\n\n"
+                f"- Category: `{pending['category']}`\n"
+                f"- Summary: {pending['summary']}\n"
+                f"- Order: {pending.get('order_id') or '—'}\n"
+                f"- Ticket: {pending.get('ticket_id') or '—'}"
+            )
         col1, col2 = st.columns(2)
         if col1.button("Confirm and submit", type="primary", use_container_width=True):
-            record = data_store.create_escalation_record(
-                account_id=st.session_state.account_id,
-                category=pending["category"],
-                summary=pending["summary"],
-                order_id=pending.get("order_id"),
-                ticket_id=pending.get("ticket_id"),
-            )
-            st.session_state.pending_action = None
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"Escalation **{record['escalation_id']}** has been created "
-                           f"and routed to the support team.",
-            })
+            if kind == "cancel_order":
+                record = data_store.cancel_order(
+                    st.session_state.account_id, pending["order_id"],
+                )
+                st.session_state.pending_action = None
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": (
+                        f"Order **{pending['order_id']}** is now **CANCELLED**."
+                        if record else
+                        f"Could not cancel **{pending['order_id']}** — it was not found on this account."
+                    ),
+                })
+            else:
+                record = data_store.create_escalation_record(
+                    account_id=st.session_state.account_id,
+                    category=pending["category"],
+                    summary=pending["summary"],
+                    order_id=pending.get("order_id"),
+                    ticket_id=pending.get("ticket_id"),
+                )
+                st.session_state.pending_action = None
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": f"Escalation **{record['escalation_id']}** has been created "
+                               f"and routed to the support team.",
+                })
             st.rerun()
-        if col2.button("Cancel", use_container_width=True):
+        dismiss_label = "Don't cancel" if kind == "cancel_order" else "Cancel"
+        if col2.button(dismiss_label, use_container_width=True):
             st.session_state.pending_action = None
             st.session_state.messages.append({
                 "role": "assistant", "content": "Understood — that hasn't been submitted.",
@@ -276,13 +295,9 @@ if user_message:
             reply, tool_log, pending = agent.run_turn(
                 st.session_state.chat, st.session_state.account_id, index, user_message,
             )
-        if tool_log:
-            with st.expander("View reasoning steps"):
-                for call in tool_log:
-                    st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply, "tool_log": tool_log})
+    st.session_state.messages.append({"role": "assistant", "content": reply})
     if pending:
         st.session_state.pending_action = pending
         st.rerun()

@@ -94,6 +94,7 @@ def get_account_data(account_id: str, order_id: str | None = None,
             order_view = {k: order[k] for k in ORDER_FIELDS}
             order_view["cancellation"] = business_rules.evaluate_cancellation(order, overrides, now)
             order_view["service_credit"] = business_rules.evaluate_service_credit(order, overrides, now)
+            order_view["delay"] = business_rules.evaluate_order_delay(order, now)
             response["order"] = order_view
 
     if ticket_id:
@@ -132,10 +133,37 @@ def create_escalation_draft(account_id: str, category: str, summary: str,
 
     return _jsonable({
         "status": "awaiting_confirmation",
+        "kind": "escalation",
         "category": category,
         "summary": summary,
         "order_id": order_id,
         "ticket_id": ticket_id,
         "message": "Draft prepared. Waiting for the user to confirm in the interface "
                    "before this is actually created.",
+    })
+
+
+def cancel_order_draft(account_id: str, order_id: str):
+    """Prepares a cancellation but does NOT apply it until the user confirms in app.py."""
+    order = data_store.get_order(account_id, order_id)
+    if order is None:
+        return _jsonable({"error": f"No order {order_id} found on this account."})
+
+    overrides = business_rules.get_overrides(account_id)
+    evaluation = business_rules.evaluate_cancellation(order, overrides, data_store.NOW)
+    if not evaluation.get("cancellable"):
+        return _jsonable({
+            "error": evaluation.get("reason") or "This order cannot be cancelled.",
+            "order_status": order["status"],
+        })
+
+    return _jsonable({
+        "status": "awaiting_confirmation",
+        "kind": "cancel_order",
+        "order_id": order_id,
+        "current_status": order["status"],
+        "fee_inr": evaluation["fee_inr"],
+        "reason": evaluation["reason"],
+        "message": "Draft prepared. Waiting for the user to confirm in the interface "
+                   "before the order status is changed to CANCELLED.",
     })

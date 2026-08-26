@@ -74,6 +74,17 @@ def list_tickets_for_account(account_id: str):
     return TICKETS[TICKETS["account_id"] == account_id].to_dict("records")
 
 
+def cancel_order(account_id: str, order_id: str):
+    """Marks the order CANCELLED in memory for this process. The Excel workbook is
+    not rewritten -- restarting the app reloads the original snapshot."""
+    mask = (ORDERS["order_id"] == order_id) & (ORDERS["account_id"] == account_id)
+    if not mask.any():
+        return None
+    ORDERS.loc[mask, "status"] = "CANCELLED"
+    ORDERS.loc[mask, "cancellation_requested_at"] = NOW
+    return get_order(account_id, order_id)
+
+
 def _load_escalations():
     if ESCALATIONS_PATH.exists():
         return json.loads(ESCALATIONS_PATH.read_text())

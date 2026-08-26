@@ -14,7 +14,7 @@ from pypdf import PdfReader
 import google.generativeai as genai
 
 DATA_DIR = Path(__file__).parent / "data"
-EMBED_MODEL = "models/text-embedding-004"
+EMBED_MODEL = "text-embedding-004"
 
 # Status metadata the agent should use to weigh source authority. A signed agreement
 # outranks the current policy, which outranks product docs; the deprecated policy is

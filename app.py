@@ -292,9 +292,22 @@ if user_message:
 
     with st.chat_message("assistant", avatar="📦"):
         with st.spinner("Looking into it..."):
-            reply, tool_log, pending = agent.run_turn(
-                st.session_state.chat, st.session_state.account_id, index, user_message,
-            )
+            try:
+                reply, tool_log, pending = agent.run_turn(
+                    st.session_state.chat, st.session_state.account_id, index, user_message,
+                )
+            except Exception as e:
+                if "rate_limit" in str(e).lower() or "429" in str(e) or "rate limit" in str(e).lower():
+                    reply = (
+                        "⚠️ **API rate limit reached.** The AI service is temporarily "
+                        "unavailable due to too many requests. Please wait 30–60 seconds "
+                        "and try again."
+                    )
+                else:
+                    reply = (
+                        "⚠️ **Something went wrong.** Please try again in a moment."
+                    )
+                tool_log, pending = [], None
         st.markdown(reply)
 
     st.session_state.messages.append({"role": "assistant", "content": reply})

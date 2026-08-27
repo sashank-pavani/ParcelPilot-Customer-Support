@@ -9,6 +9,7 @@ from dotenv import load_dotenv #imports dotenv file to load the environment vari
 
 import agent #imports agents.py file
 import data_store #imports data_store.py file
+import db
 
 load_dotenv()
 
@@ -126,10 +127,18 @@ def get_document_index(api_key_fingerprint: str):
 
 
 def init_chat(api_key: str, account_id: str):
+    import uuid
     st.session_state.chat = agent.new_chat(api_key)
     st.session_state.account_id = account_id
-    st.session_state.messages = []
     st.session_state.pending_action = None
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    # Load last 10 messages from Supabase for this session
+    history = db.load_history(st.session_state.session_id)
+    st.session_state.messages = history
+    # Restore into chat history so model has context
+    for msg in history:
+        st.session_state.chat["messages"].append(msg)
 
 
 def login_screen():
@@ -287,6 +296,7 @@ user_message = st.chat_input(
 )
 if user_message:
     st.session_state.messages.append({"role": "user", "content": user_message})
+    db.save_message(st.session_state.session_id, st.session_state.account_id, "user", user_message)
     with st.chat_message("user"):
         st.markdown(user_message)
 
@@ -297,7 +307,8 @@ if user_message:
                     st.session_state.chat, st.session_state.account_id, index, user_message,
                 )
             except Exception as e:
-                if "rate_limit" in str(e).lower() or "429" in str(e) or "rate limit" in str(e).lower():
+                from groq import RateLimitError
+                if isinstance(e, RateLimitError):
                     reply = (
                         "⚠️ **API rate limit reached.** The AI service is temporarily "
                         "unavailable due to too many requests. Please wait 30–60 seconds "
@@ -311,6 +322,7 @@ if user_message:
         st.markdown(reply)
 
     st.session_state.messages.append({"role": "assistant", "content": reply})
+    db.save_message(st.session_state.session_id, st.session_state.account_id, "assistant", reply)
     if pending:
         st.session_state.pending_action = pending
         st.rerun()

@@ -1,16 +1,16 @@
-"""Loads ParcelPilot's structured data (accounts, orders, tickets) from the supplied
-workbook and exposes small, account-scoped helper functions.
+"""Loads ParcelPilot's structured data (accounts, orders, tickets) from Supabase.
 
 All financial and date math in this app happens here or in business_rules.py, never
 inside a prompt, so the numbers Streamlit shows are exact and reproducible.
 """
+import os
 import json
 from pathlib import Path
 
 import pandas as pd
+from supabase import create_client
 
 DATA_DIR = Path(__file__).parent / "data"
-WORKBOOK_PATH = DATA_DIR / "ParcelPilot_Assessment_Data.xlsx"
 ESCALATIONS_PATH = DATA_DIR / "escalations.json"
 
 _DATE_COLUMNS_ORDERS = [
@@ -19,33 +19,49 @@ _DATE_COLUMNS_ORDERS = [
 ]
 _DATE_COLUMNS_TICKETS = ["created_at", "last_customer_message_at"]
 
-
-def _load_workbook():
-    accounts = pd.read_excel(WORKBOOK_PATH, sheet_name="accounts")
-    orders = pd.read_excel(WORKBOOK_PATH, sheet_name="orders", parse_dates=_DATE_COLUMNS_ORDERS)
-    tickets = pd.read_excel(WORKBOOK_PATH, sheet_name="tickets", parse_dates=_DATE_COLUMNS_TICKETS)
-    readme = pd.read_excel(WORKBOOK_PATH, sheet_name="README", header=None)
-    return accounts, orders, tickets, readme
+_supabase = None
 
 
-ACCOUNTS, ORDERS, TICKETS, _README = _load_workbook()
+def _get_client():
+    global _supabase
+    if _supabase is None:
+        _supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+    return _supabase
 
 
-def _readme_value(label: str) -> str:
-    row = _README[_README[0] == label]
-    return str(row.iloc[0, 1]) if not row.empty else ""
+def _parse_dates(records: list, date_cols: list) -> list:
+    for r in records:
+        for col in date_cols:
+            if col in r and r[col]:
+                r[col] = pd.to_datetime(r[col])
+            elif col in r:
+                r[col] = pd.NaT
+    return records
 
 
-# Every "current time" question in this assessment is answered relative to the dataset
-# snapshot time stated in the workbook's README sheet, not the real wall clock -- this
-# keeps answers reproducible no matter when the app is actually run or graded.
-_snapshot = _readme_value("Dataset snapshot")
+def _load_data():
+    client = _get_client()
+    accounts = pd.DataFrame(client.table("accounts").select("*").execute().data)
+    orders_raw = client.table("orders").select("*").execute().data
+    _parse_dates(orders_raw, _DATE_COLUMNS_ORDERS)
+    orders = pd.DataFrame(orders_raw)
+    tickets_raw = client.table("tickets").select("*").execute().data
+    _parse_dates(tickets_raw, _DATE_COLUMNS_TICKETS)
+    tickets = pd.DataFrame(tickets_raw)
+    return accounts, orders, tickets
+
+
+ACCOUNTS, ORDERS, TICKETS = _load_data()
+
+# Keep NOW tied to the dataset snapshot for reproducibility
+_WORKBOOK = DATA_DIR / "ParcelPilot_Assessment_Data.xlsx"
+_readme = pd.read_excel(_WORKBOOK, sheet_name="README", header=None)
+_snapshot = str(_readme[_readme[0] == "Dataset snapshot"].iloc[0, 1])
 NOW = pd.to_datetime(" ".join(_snapshot.split()[:2]))
-CURRENCY = _readme_value("Currency") or "INR"
+CURRENCY = "INR"
 
 
 def list_accounts():
-    """The small list of demo accounts, for the 'log in as' selector only."""
     return ACCOUNTS[["account_id", "account_name", "plan"]].to_dict("records")
 
 
@@ -55,8 +71,6 @@ def get_account(account_id: str):
 
 
 def get_order(account_id: str, order_id: str):
-    """Returns the order only if it belongs to account_id. This is the access-control
-    boundary: a caller can never fetch another account's order by guessing its ID."""
     row = ORDERS[(ORDERS["order_id"] == order_id) & (ORDERS["account_id"] == account_id)]
     return row.iloc[0].to_dict() if not row.empty else None
 
@@ -75,32 +89,32 @@ def list_tickets_for_account(account_id: str):
 
 
 def cancel_order(account_id: str, order_id: str):
-    """Marks the order CANCELLED in memory for this process. The Excel workbook is
-    not rewritten -- restarting the app reloads the original snapshot."""
+    """Marks the order CANCELLED in Supabase and in the in-memory dataframe."""
     mask = (ORDERS["order_id"] == order_id) & (ORDERS["account_id"] == account_id)
     if not mask.any():
         return None
     ORDERS.loc[mask, "status"] = "CANCELLED"
     ORDERS.loc[mask, "cancellation_requested_at"] = NOW
+    _get_client().table("orders").update({
+        "status": "CANCELLED",
+        "cancellation_requested_at": NOW.isoformat(),
+    }).eq("order_id", order_id).eq("account_id", account_id).execute()
     return get_order(account_id, order_id)
 
 
-def _load_escalations():
-    if ESCALATIONS_PATH.exists():
-        return json.loads(ESCALATIONS_PATH.read_text())
-    return []
-
-
 def list_escalations_for_account(account_id: str):
-    return [e for e in _load_escalations() if e["account_id"] == account_id]
+    try:
+        result = _get_client().table("escalations").select("*").eq("account_id", account_id).execute()
+        return result.data
+    except Exception:
+        return []
 
 
 def create_escalation_record(account_id: str, category: str, summary: str,
                               order_id: str | None, ticket_id: str | None):
-    """Mocked state-changing action: appends a new escalation to a local JSON file.
-    Only ever called after the user clicks Confirm in the UI -- see app.py."""
-    escalations = _load_escalations()
-    new_id = f"ESC-{1000 + len(escalations) + 1}"
+    """Creates escalation in Supabase. Only called after user clicks Confirm."""
+    existing = list_escalations_for_account(account_id)
+    new_id = f"ESC-{1000 + len(existing) + 1}"
     record = {
         "escalation_id": new_id,
         "account_id": account_id,
@@ -108,12 +122,8 @@ def create_escalation_record(account_id: str, category: str, summary: str,
         "summary": summary,
         "order_id": order_id,
         "ticket_id": ticket_id,
-        # This mock has no support team actually working the queue, so every
-        # escalation sits at "submitted" forever -- stated plainly rather than
-        # fabricating a status the system has no way to know.
         "status": "submitted (this demo does not simulate support-team resolution)",
-        "created_at": NOW.strftime("%Y-%m-%d %H:%M"),
+        "created_at": NOW.isoformat(),
     }
-    escalations.append(record)
-    ESCALATIONS_PATH.write_text(json.dumps(escalations, indent=2))
+    _get_client().table("escalations").insert(record).execute()
     return record

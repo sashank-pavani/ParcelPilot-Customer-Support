@@ -25,7 +25,16 @@ _supabase = None
 def _get_client():
     global _supabase
     if _supabase is None:
-        _supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY")
+        if not url or not key:
+            try:
+                import streamlit as st
+                url = st.secrets.get("SUPABASE_URL", url)
+                key = st.secrets.get("SUPABASE_KEY", key)
+            except Exception:
+                pass
+        _supabase = create_client(url, key)
     return _supabase
 
 
@@ -51,7 +60,13 @@ def _load_data():
     return accounts, orders, tickets
 
 
-ACCOUNTS, ORDERS, TICKETS = _load_data()
+ACCOUNTS = ORDERS = TICKETS = None
+
+
+def _ensure_loaded():
+    global ACCOUNTS, ORDERS, TICKETS
+    if ACCOUNTS is None:
+        ACCOUNTS, ORDERS, TICKETS = _load_data()
 
 # Keep NOW tied to the dataset snapshot for reproducibility
 _WORKBOOK = DATA_DIR / "ParcelPilot_Assessment_Data.xlsx"
@@ -62,34 +77,41 @@ CURRENCY = "INR"
 
 
 def list_accounts():
+    _ensure_loaded()
     return ACCOUNTS[["account_id", "account_name", "plan"]].to_dict("records")
 
 
 def get_account(account_id: str):
+    _ensure_loaded()
     row = ACCOUNTS[ACCOUNTS["account_id"] == account_id]
     return row.iloc[0].to_dict() if not row.empty else None
 
 
 def get_order(account_id: str, order_id: str):
+    _ensure_loaded()
     row = ORDERS[(ORDERS["order_id"] == order_id) & (ORDERS["account_id"] == account_id)]
     return row.iloc[0].to_dict() if not row.empty else None
 
 
 def get_ticket(account_id: str, ticket_id: str):
+    _ensure_loaded()
     row = TICKETS[(TICKETS["ticket_id"] == ticket_id) & (TICKETS["account_id"] == account_id)]
     return row.iloc[0].to_dict() if not row.empty else None
 
 
 def list_orders_for_account(account_id: str):
+    _ensure_loaded()
     return ORDERS[ORDERS["account_id"] == account_id].to_dict("records")
 
 
 def list_tickets_for_account(account_id: str):
+    _ensure_loaded()
     return TICKETS[TICKETS["account_id"] == account_id].to_dict("records")
 
 
 def cancel_order(account_id: str, order_id: str):
     """Marks the order CANCELLED in Supabase and in the in-memory dataframe."""
+    _ensure_loaded()
     mask = (ORDERS["order_id"] == order_id) & (ORDERS["account_id"] == account_id)
     if not mask.any():
         return None

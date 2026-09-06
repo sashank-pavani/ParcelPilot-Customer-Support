@@ -217,9 +217,11 @@ def run_turn(chat, account_id: str, index, user_message: str):
     tool_log = []
     pending_action = None
     
-    # Build message list for Groq (includes chat history)
-    messages = chat["messages"].copy()
-    messages.append({"role": "user", "content": user_message})
+    # Build message list for Groq — keep system prompt + last 10 messages to limit token usage
+    history = chat["messages"]
+    system_msgs = [m for m in history if m["role"] == "system"]
+    non_system = [m for m in history if m["role"] != "system"]
+    messages = system_msgs + non_system[-10:] + [{"role": "user", "content": user_message}]
     
     # First call to Groq
     response = _send_with_retry(messages)

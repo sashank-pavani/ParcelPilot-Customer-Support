@@ -1,116 +1,111 @@
 # ParcelPilot Support Chatbot
 
-A customer-facing AI support chatbot for ParcelPilot, built for the CalQuity AI
-Engineer assessment. One Python app (Streamlit UI + a small Gemini tool-calling
-agent) answers customer questions about shipments, cancellations, service credits,
-and support SLAs, grounded in the supplied policy PDFs and structured account data.
+A customer support chatbot built for the CalQuity AI Engineer assessment. Customers can log in, ask about their orders and policies, get cancellation fees calculated, escalate issues, and cancel orders — all through a chat interface.
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how it's built and
-[`PRODUCT_NOTE.md`](PRODUCT_NOTE.md) for product decisions and what's next.
+Live demo: deployed on Streamlit Cloud.
+
+---
 
 ## What it does
 
-- Answers natural-language questions using **only** the supplied data pack (policies,
-  SOPs, product docs, signed customer agreements, and the accounts/orders/tickets
-  workbook), and knows which sources outrank which when they conflict.
-- Scopes every customer to their **own account only** — enforced in code, not just in
-  the prompt.
-- Uses **three tools**: document search, structured-data lookup + calculation, and a
-  mocked "create escalation" action that **always requires a confirmation click**
-  before it actually happens.
-- Shows which tool ran, with what arguments, under each reply.
+- Answers questions about shipments, cancellations, service credits, and SLAs
+- Searches across 6 policy PDFs to give grounded, cited answers
+- Looks up real account data (orders, tickets) scoped to the logged-in customer only
+- Calculates fees and credits using Python logic — never asks the AI to do the math
+- Lets customers create escalations or cancel orders, but only after they click Confirm
+- Detects stuck shipments (carrier didn't show up) and flags them automatically
+- Stores conversation history and escalations in Supabase (persists across sessions)
 
-## 1. Setup
+---
 
-Requires Python 3.11+.
+## Tech stack
+
+| Layer | What we use | Why |
+|---|---|---|
+| UI | Streamlit | Fast to build, easy to deploy |
+| Chat AI | Groq (llama-3.3-70b-versatile) | Fast, free tier, OpenAI-compatible |
+| PDF search | sentence-transformers (all-MiniLM-L6-v2) | Local model, no API key needed |
+| Database | Supabase (PostgreSQL) | Free, persistent, easy Python client |
+| Business logic | Plain Python | Exact numbers, no AI hallucinations |
+
+---
+
+## Why Groq instead of Gemini?
+
+We started with Gemini for chat. It worked initially but we hit the free-tier rate limit quickly — the model makes multiple API calls per user message (one per tool call), so the limit runs out faster than expected.
+
+Groq has a more generous free tier and their API is OpenAI-compatible, so the switch was straightforward. We kept the same tool-calling structure, just changed the client.
+
+For PDF embeddings, we originally tried Gemini's embedding API but the API key type we had (OAuth token starting with `AQ.`) wasn't supported for embeddings. Rather than fight the auth issue, we switched to `sentence-transformers` which runs locally — no key needed, no rate limits.
+
+---
+
+## Setup (local)
+
+Requires Python 3.11.
 
 ```bash
 python -m venv venv
-venv\Scripts\activate          # on Windows
-# source venv/bin/activate     # on macOS/Linux
+venv\Scripts\activate        # Windows
+source venv/bin/activate     # Mac/Linux
 pip install -r requirements.txt
 ```
 
-Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey),
-then create a file named `.env` in this folder (copy `.env.example`) containing:
+Create a `.env` file:
 
 ```
-GEMINI_API_KEY=your-actual-key-here
+GROQ_API_KEY=your-groq-key-here
+SUPABASE_URL=your-supabase-url
+SUPABASE_KEY=your-supabase-anon-key
 ```
 
-(If you skip this, the app will ask for a key in the sidebar instead — handy for a
-one-off local test, but `.env` is the normal way to run it.)
-
-The app defaults to `gemini-3.5-flash-lite`, chosen after testing a few Gemini models
-against this free-tier key: it supports function calling and had the most generous
-free rate limit of the ones tried. If your key hits a different model's free-tier
-limits, override it without touching code by setting `GEMINI_MODEL` in `.env`. A
-short burst of rate-limit errors is also retried automatically (see `agent.py`).
-
-## 2. Run it locally
+Get a free Groq key at [console.groq.com](https://console.groq.com).
 
 ```bash
 streamlit run app.py
 ```
 
-This opens the chat UI at `http://localhost:8501`. Log in with any account ID as the
-username (e.g. `ACCT-001`) and the demo password `cust1234` (shown on the login
-screen itself). Use the sidebar's **Log out** button to switch accounts.
+Opens at `http://localhost:8501`. Log in with any account ID (`ACCT-001`, `ACCT-002`, etc.) and password `cust1234`.
 
-Optional — sanity-check the deterministic business logic (fees/credits/SLAs) without
-any API key or network access:
+---
 
-```bash
-python sanity_check.py
-```
+## Deploy (Streamlit Cloud)
 
-## 3. Try it
-
-Log in as **ACCT-001** (Northstar Logistics) and ask:
-
-> Can I cancel ORD-1001 without a cancellation fee? Explain why.
-
-Log out, log back in as **ACCT-002** (LumenWorks), and ask:
-
-> A pickup on order ORD-2002 is late because of carrier fault. Am I owed a service credit?
-
-Ask either account to escalate something (e.g. *"escalate this to support"*) and
-notice the app pauses for a **Confirm** click before anything is actually created —
-try clicking **Cancel** too. Also try asking one account about another account's
-order ID — it should come back "not found," not real data.
-
-## 4. Deploy it (Streamlit Community Cloud — free, easiest option)
-
-1. Push this folder to a **public** GitHub repo (the `.env` file and
-   `data/escalations.json` are already git-ignored, so your key won't be committed).
-2. Go to [share.streamlit.io](https://share.streamlit.io), sign in with GitHub, click
-   **New app**, and point it at this repo's `app.py`.
-3. In the app's **Settings → Secrets**, add:
+1. Push to a public GitHub repo
+2. Go to [share.streamlit.io](https://share.streamlit.io) → New app → point to `app.py`
+3. Add secrets in Settings → Secrets:
    ```
-   GEMINI_API_KEY = "your-actual-key-here"
+   GROQ_API_KEY = "your-key"
+   SUPABASE_URL = "your-url"
+   SUPABASE_KEY = "your-anon-key"
    ```
-4. Deploy. You'll get a public URL like `https://your-app.streamlit.app` — that's the
-   link to submit.
+4. Deploy
+
+---
 
 ## Project layout
 
 ```
-app.py              Streamlit chat UI
-agent.py             Gemini tool-calling loop + system prompt + tool schema
-tools.py             The 3 tools the agent can call (thin wrappers with access control)
-business_rules.py    Deterministic fee/credit/SLA calculations (plain Python, no LLM)
-documents.py          PDF chunking + embedding search over the policy/contract docs
-data_store.py        Loads the workbook; account-scoped data access; escalation log
-sanity_check.py       Offline check of business_rules against the real dataset
-data/                 The supplied data pack (PDFs + workbook) + generated escalations.json
-.streamlit/config.toml  App theme (colors/fonts) -- no code, just Streamlit's native theming
-ARCHITECTURE.md       Architecture note (required submission doc)
-PRODUCT_NOTE.md       Product note (required submission doc)
+app.py               Streamlit UI — login, chat, confirm buttons
+agent.py             Groq tool-calling loop, system prompt, tool schema
+tools.py             Three tools the agent can call (with access control)
+business_rules.py    Fee, credit, SLA calculations — pure Python, no AI
+documents.py         PDF chunking + embedding search via sentence-transformers
+data_store.py        Supabase queries for accounts, orders, tickets, escalations
+db.py                Conversation history (save/load from Supabase)
+data/                Policy PDFs + Excel workbook (source data)
+.streamlit/          Theme config (colors, fonts)
 ```
 
-## AI tool usage
+---
 
-Built with Claude Code (Anthropic) as a pair-programming assistant: reading and
-summarizing the supplied PDFs/workbook, drafting the module structure, and writing
-the business-rule logic, which was then verified against the dataset with
-`sanity_check.py` before being wired up to the live Gemini agent.
+## Demo accounts
+
+| Account | Name | Plan |
+|---|---|---|
+| ACCT-001 | Northstar Logistics | Enterprise |
+| ACCT-002 | LumenWorks | Growth |
+| ACCT-003 | BlueRidge Co | Standard |
+| ACCT-004 | Zenith Parts | Standard |
+
+Password for all: `cust1234`

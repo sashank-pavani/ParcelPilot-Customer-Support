@@ -11,7 +11,7 @@ def _get_client():
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_KEY")
         _client = create_client(url, key)
-    return _client
+    return _client  
 
 
 def save_message(session_id: str, account_id: str, role: str, content: str):

@@ -148,8 +148,8 @@ def login_screen():
         st.markdown("### Sign in")
         demo_ids = ", ".join(f"<code>{a['account_id']}</code>" for a in data_store.list_accounts())
         st.markdown(
-            f'<div class="pp-hint">Demo access for this walkthrough — username: '
-            f'{demo_ids} · password: <code>{DEMO_PASSWORD}</code> for every account.</div>',
+            f'<div class="pp-hint">For this demo, all the usernames: '
+            f'{demo_ids} · the password is: <code>{DEMO_PASSWORD}</code> for every account.</div>',
             unsafe_allow_html=True,
         )
         with st.form("login_form"):
@@ -207,13 +207,12 @@ with st.sidebar:
         st.divider()
 
     st.caption(
-        "Login is mocked for this walkthrough, but the boundary it protects is real: "
-        "every lookup is scoped server-side to the signed-in account, so it can't be "
-        "asked to return another customer's data."
+            "Login is simplified for this demo, \n"
+            "Each customer can only access their own data"
     )
 
 if not api_key:
-    st.info("Add a Gemini API key in the sidebar to continue.")
+    st.info("Add a Grok API key in the sidebar to continue.")
     st.stop()
 
 agent.configure(api_key)

@@ -14,6 +14,7 @@ import time
 from groq import Groq
 import json
 
+from langsmith import traceable
 
 import documents
 import tools
@@ -27,6 +28,7 @@ MAX_TOOL_ROUNDS = 6
 MAX_RATE_LIMIT_RETRIES = 3
 
 
+@traceable(name="groq_chat_completion", run_type="llm")
 def _send_with_retry(messages):
     """Groq's free tier is generous but may briefly rate-limit under bursts.
     Retry a couple of times before giving up."""
@@ -208,6 +210,7 @@ def build_document_index():
 
 
 
+@traceable(name="agent_turn", run_type="chain")
 def run_turn(chat, account_id: str, index, user_message: str):
     """Runs one user turn to completion, executing tool calls along the way.
 

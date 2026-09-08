@@ -16,6 +16,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from langsmith import traceable
 
 import business_rules
 import data_store
@@ -54,12 +55,14 @@ def _jsonable(value):
     return value
 
 
+@traceable(run_type="tool")
 def search_policies(account_id: str, index, query: str):
     """Search policies, SOPs, product docs, and signed customer agreements."""
     results = documents.search(index, query, top_k=4)
     return _jsonable({"query": query, "results": results})
 
 
+@traceable(run_type="tool")
 def get_account_data(account_id: str, order_id: str | None = None,
                       ticket_id: str | None = None, severity: str | None = None):
     """Scoped structured-data lookup + deterministic calculations for the logged-in
@@ -120,6 +123,7 @@ def get_account_data(account_id: str, order_id: str | None = None,
     return _jsonable(response)
 
 
+@traceable(run_type="tool")
 def create_escalation_draft(account_id: str, category: str, summary: str,
                              order_id: str | None = None, ticket_id: str | None = None):
     """Prepares an escalation but does NOT create it. app.py intercepts this call,
@@ -143,6 +147,7 @@ def create_escalation_draft(account_id: str, category: str, summary: str,
     })
 
 
+@traceable(run_type="tool")
 def cancel_order_draft(account_id: str, order_id: str):
     """Prepares a cancellation but does NOT apply it until the user confirms in app.py."""
     order = data_store.get_order(account_id, order_id)

@@ -132,11 +132,22 @@ def list_escalations_for_account(account_id: str):
         return []
 
 
+def _next_escalation_id():
+    """escalation_id is unique across ALL accounts, so the next id must be based on
+    every existing escalation, not just this account's -- otherwise two accounts each
+    creating their first escalation would both compute ESC-1001."""
+    result = _get_client().table("escalations").select("escalation_id").execute()
+    existing_ids = result.data
+    if not existing_ids:
+        return "ESC-1001"
+    max_num = max(int(row["escalation_id"].split("-")[1]) for row in existing_ids)
+    return f"ESC-{max_num + 1}"
+
+
 def create_escalation_record(account_id: str, category: str, summary: str,
                               order_id: str | None, ticket_id: str | None):
     """Creates escalation in Supabase. Only called after user clicks Confirm."""
-    existing = list_escalations_for_account(account_id)
-    new_id = f"ESC-{1000 + len(existing) + 1}"
+    new_id = _next_escalation_id()
     record = {
         "escalation_id": new_id,
         "account_id": account_id,

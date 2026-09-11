@@ -41,7 +41,7 @@ The loop is manual (not using any auto-function-calling SDK feature) so we can:
 
 We started with Gemini Flash for chat. It worked initially but the free-tier rate limit ran out quickly — the model makes multiple API calls per user message (one per tool round), which burns through the quota fast.
 
-We switched to Groq's `llama-3.3-70b-versatile`. Groq has a more generous free tier and their API is OpenAI-compatible, so the switch only required changing the client. The tool schema format is identical.
+We switched to Groq's `openai/gpt-oss-20b`. Groq has a more generous free tier and their API is OpenAI-compatible, so the switch only required changing the client. The tool schema format is identical.
 
 ---
 
@@ -77,15 +77,6 @@ Cancellations and escalations write back to Supabase immediately — they surviv
 
 ---
 
-## Business rules
-
-Cancellation fees, service credits, and SLA breach checks are all calculated in `business_rules.py` — plain Python with hardcoded constants from the policy PDFs. The AI is never asked to compute these; it only reads the result and explains it.
-
-Why hardcode instead of re-parsing PDFs? Because asking an LLM to extract a rupee amount from a contract PDF on every request is a reliability risk. The numbers are small and stable — encoding them directly is safer.
-
-The two signed customer agreements (Northstar Logistics and LumenWorks) have custom terms that override the defaults. These overrides are also in `business_rules.py` as a simple Python dict.
-
----
 
 ## Access control
 
@@ -93,9 +84,3 @@ The two signed customer agreements (Northstar Logistics and LumenWorks) have cus
 
 ---
 
-## Things we deliberately didn't build
-
-- **Business-hour calendar for SLA checks** — the dataset timestamps all fall within one day, so wall-clock time was accurate enough. Noted explicitly in the tool response.
-- **Vector database** — six documents don't need one. In-memory numpy is simpler and faster to understand.
-- **Auto-function-calling** — manual loop gives us visibility and confirmation gating.
-- **Roles beyond "customer"** — a customer-facing bot has one role. Roles become useful when you add an internal ops chatbot for support agents.

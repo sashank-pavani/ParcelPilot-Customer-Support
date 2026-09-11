@@ -26,17 +26,17 @@ Live demo: deployed on Streamlit Cloud.
 | Chat AI | Groq (openai/gpt-oss-20b) | Fast, free tier, OpenAI-compatible |
 | PDF search | sentence-transformers (all-MiniLM-L6-v2) | Local model, no API key needed |
 | Database | Supabase (PostgreSQL) | Free, persistent, easy Python client |
-| Business logic | Plain Python | Exact numbers, no AI hallucinations |
+| Business logic | Plain Python | - |
 
 ---
 
 ## Why Groq instead of Gemini?
 
-We started with Gemini for chat. It worked initially but we hit the free-tier rate limit quickly — the model makes multiple API calls per user message (one per tool call), so the limit runs out faster than expected.
+I started with Gemini for chat. It worked initially but I hit the free-tier rate limit quickly — the model makes multiple API calls per user message (one per tool call), so the limit runs out faster than expected.
 
-Groq has a more generous free tier and their API is OpenAI-compatible, so the switch was straightforward. We kept the same tool-calling structure, just changed the client.
+Groq has a more generous free tier and their API is OpenAI-compatible, so the switch was straightforward. I kept the same tool-calling structure, just changed the client.
 
-For PDF embeddings, we originally tried Gemini's embedding API but the API key type we had (OAuth token starting with `AQ.`) wasn't supported for embeddings. Rather than fight the auth issue, we switched to `sentence-transformers` which runs locally — no key needed, no rate limits.
+For PDF embeddings, I originally tried Gemini's embedding API but faced the same Rate limit error. Rather than fight the issue, I switched to `sentence-transformers` which runs locally — no key needed, no rate limits.
 
 ---
 

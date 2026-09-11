@@ -23,7 +23,7 @@ Live demo: deployed on Streamlit Cloud.
 | Layer | What we use | Why |
 |---|---|---|
 | UI | Streamlit | Fast to build, easy to deploy |
-| Chat AI | Groq (llama-3.3-70b-versatile) | Fast, free tier, OpenAI-compatible |
+| Chat AI | Groq (openai/gpt-oss-20b) | Fast, free tier, OpenAI-compatible |
 | PDF search | sentence-transformers (all-MiniLM-L6-v2) | Local model, no API key needed |
 | Database | Supabase (PostgreSQL) | Free, persistent, easy Python client |
 | Business logic | Plain Python | Exact numbers, no AI hallucinations |

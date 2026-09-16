@@ -2,13 +2,13 @@
 
 Run with: streamlit run app.py
 """
-import os #imports os file to interact with the operating system
+import os
 
 import streamlit as st
-from dotenv import load_dotenv #imports dotenv file to load the environment variables
+from dotenv import load_dotenv
 
-import agent #imports agents.py file
-import data_store #imports data_store.py file
+import agent
+import data_store
 import db
 
 load_dotenv()
@@ -228,6 +228,10 @@ if "chat" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar="📦" if message["role"] == "assistant" else None):
+        if message.get("tool_log"):
+            with st.expander("View reasoning steps"):
+                for call in message["tool_log"]:
+                    st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(message["content"])
 
 if st.session_state.get("pending_action"):
@@ -318,9 +322,13 @@ if user_message:
                         "⚠️ **Something went wrong.** Please try again in a moment."
                     )
                 tool_log, pending = [], None
+        if tool_log:
+            with st.expander("View reasoning steps"):
+                for call in tool_log:
+                    st.code(f"{call['name']}({call['args']})", language="text")
         st.markdown(reply)
 
-    st.session_state.messages.append({"role": "assistant", "content": reply})
+    st.session_state.messages.append({"role": "assistant", "content": reply, "tool_log": tool_log})
     db.save_message(st.session_state.session_id, st.session_state.account_id, "assistant", reply)
     if pending:
         st.session_state.pending_action = pending

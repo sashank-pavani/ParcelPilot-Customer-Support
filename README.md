@@ -2,7 +2,7 @@
 
 A customer support chatbot built for the CalQuity AI Engineer assessment. Customers can log in, ask about their orders and policies, get cancellation fees calculated, escalate issues, and cancel orders — all through a chat interface.
 
-Live demo: deployed on Streamlit Cloud.
+Live demo: [parcelpilot-customer-support.streamlit.app](https://parcelpilot-customer-support.streamlit.app/)
 
 ---
 
